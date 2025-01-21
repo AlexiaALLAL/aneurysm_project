@@ -33,18 +33,20 @@ class RecurrentGNN(torch.nn.Module):
         return x, hidden_state
     
     def train_model(self, loader, optimizer, epochs=100):
-        self.train()
+        
         for epoch in tqdm.tqdm(range(epochs)):
+            self.train()
             total_loss = 0
             hidden_state = None  # Reset hidden state at the start of each epoch
+
             for data_t_minus_1, data_t in loader:
                 optimizer.zero_grad()
                 x_pred, hidden_state = self.forward(data_t_minus_1.x, data_t_minus_1.edge_index, hidden_state)
+                hidden_state = hidden_state.detach()  # Detach hidden state to prevent backpropagating through time
                 loss = F.mse_loss(x_pred, data_t.x)
-                loss.backward()
-                total_loss += loss.item()
+                loss.backward(retain_graph=True)
                 optimizer.step() 
-
+                total_loss += loss.item()
             
             if epoch % 10 == 0:
                 print(f"Epoch {epoch} | Loss: {total_loss:.4f}")
