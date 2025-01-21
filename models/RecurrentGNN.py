@@ -1,34 +1,50 @@
 import torch
 import torch.nn.functional as F
 from torch_geometric.data import Data, DataLoader
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GCNConv, GatedGraphConv
 import numpy as np
 import tqdm
 
 from mesh_handler import get_geometric_data
 
-class GNNPredictor(torch.nn.Module):
+class RecurrentGNN(torch.nn.Module):
     def __init__(self, input_dim=7, hidden_dim=64, output_dim=7):
-        super(GNNPredictor, self).__init__()
-        self.conv1 = GCNConv(input_dim, hidden_dim)
-        self.conv2 = GCNConv(hidden_dim, output_dim)
+        super(RecurrentGNN, self).__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
+        self.gnn_conv = GCNConv(input_dim, hidden_dim)
+        self.rnn = torch.nn.GRU(hidden_dim, hidden_dim, batch_first=True)  # GRU for temporal info
+        self.fc = torch.nn.Linear(hidden_dim, output_dim)  # Output: vx, vy, vz, p
 
-    def forward(self, x, edge_index):
-        x = F.relu(self.conv1(x, edge_index))  # First GCN layer with ReLU
-        x = self.conv2(x, edge_index)         # Output layer
-        return x
+        # self.gnn = GatedGraphConv(out_channels=hidden_dim, num_layers=3)
+        # self.rnn = torch.nn.GRU(hidden_dim, hidden_dim, batch_first=True)
+        # self.fc = torch.nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x, edge_index, hidden_state):
+        if hidden_state is None:
+            hidden_state = torch.zeros(1, 1, self.hidden_dim, device=x.device)
+
+        # print(f"Initial x shape: {x.shape}, hidden_state shape: {hidden_state.shape}")
+        x = self.gnn_conv(x, edge_index)
+        x, hidden_state = self.rnn(x.unsqueeze(0), hidden_state)  # RNN step
+        x = self.fc(x.squeeze(0))
+        # print(f"Final x shape: {x.shape}, hidden_state shape: {hidden_state.shape}")
+        return x, hidden_state
     
     def train_model(self, loader, optimizer, epochs=100):
         self.train()
         for epoch in tqdm.tqdm(range(epochs)):
             total_loss = 0
+            hidden_state = None  # Reset hidden state at the start of each epoch
             for data_t_minus_1, data_t in loader:
                 optimizer.zero_grad()
-                predictions = self.forward(data_t_minus_1.x, data_t_minus_1.edge_index)  # Predict x_t
-                loss = F.mse_loss(predictions, data_t.x)  # Compare with actual x_t
+                x_pred, hidden_state = self.forward(data_t_minus_1.x, data_t_minus_1.edge_index, hidden_state)
+                loss = F.mse_loss(x_pred, data_t.x)
                 loss.backward()
-                optimizer.step()
                 total_loss += loss.item()
+                optimizer.step() 
+
             
             if epoch % 10 == 0:
                 print(f"Epoch {epoch} | Loss: {total_loss:.4f}")
@@ -56,8 +72,9 @@ class GNNPredictor(torch.nn.Module):
         # predict each time step
         total_error = 0
         list_errors = []
+        hidden_state = None
         for i in range(2, len(meshes)):
-            x = self.forward(graph_data.x, graph_data.edge_index)
+            x, hidden_state = self.forward(graph_data.x, graph_data.edge_index, hidden_state=hidden_state)
             error = F.mse_loss(x, x_list_truth[i])/len(meshes[0].points)
             list_errors.append(error.item())
             total_error += error.item()

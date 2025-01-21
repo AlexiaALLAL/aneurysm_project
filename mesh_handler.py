@@ -3,6 +3,8 @@ import os.path as osp
 import shutil
 import meshio
 from typing import List
+import numpy as np
+import torch
 
 ### XDMF ARCHIVE ###
 # The dataset simulations are stored in XDMF/HDF5 achives (one .xdmf and one .h5 for each simulation).
@@ -140,6 +142,32 @@ def create_mock_mesh() -> meshio.Mesh:
     )
     print("Mock mesh created.")
     return mesh
+
+
+def get_geometric_data(mesh):
+    # Extract node positions
+    node_positions = mesh.points  # Shape: (num_nodes, 3)
+
+    # Extract connectivity (edges)
+    elements = mesh.cells_dict["tetra"]  # Extract tetrahedra
+
+    # Convert elements to edges (each triangle/tetrahedron defines connections)
+    edges = np.hstack([
+            [elements[:, 0], elements[:, 1]],  # Edge 1
+            [elements[:, 0], elements[:, 2]],  # Edge 2
+            [elements[:, 0], elements[:, 3]],  # Edge 3
+            [elements[:, 1], elements[:, 2]],  # Edge 4
+            [elements[:, 1], elements[:, 3]],  # Edge 5
+            [elements[:, 2], elements[:, 3]],  # Edge 6
+        ]).T # Shape: (num_edges, 2)
+
+    edges = np.unique(edges, axis=0)  # Remove duplicate edges
+    edge_index = torch.tensor(edges.T, dtype=torch.long)  # PyG format (2, num_edges)
+
+    # Compute edge features (relative positions)
+    edge_attr = node_positions[edges[:, 1]] - node_positions[edges[:, 0]]  # Shape: (num_edges, 3)
+    edge_attr = torch.tensor(edge_attr, dtype=torch.float)
+    return edge_index, edge_attr
 
 
 if __name__ == "__main__":
