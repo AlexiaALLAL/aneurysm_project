@@ -40,7 +40,10 @@ class ZeroPredictor(torch.nn.Module):
         list_errors = []
         for i in range(2, len(meshes)):
             x = self.forward(graph_data.x, graph_data.edge_index)
-            error = F.mse_loss(x, x_list_truth[i])/len(meshes[0].points)
+            v = x[:, 3:6]
+            v_truth = x_list_truth[i][:, 3:6]
+            
+            error = F.mse_loss(v, v_truth)/len(meshes[0].points)
             list_errors.append(error.item())
             total_error += error.item()
             graph_data = Data(x=x, edge_index=graph_data.edge_index, edge_attr=graph_data.edge_attr)

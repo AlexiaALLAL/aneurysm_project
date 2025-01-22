@@ -11,7 +11,7 @@ import torch
 # This format allows to compress a whole simulation in 2 files.
 # To access the mesh data, or save mesh data to this format, you can use 'xdmf_to_meshes' and 'meshes_to_xdmf'.
 
-def xdmf_to_meshes(xdmf_file_path: str) -> List[meshio.Mesh]:
+def xdmf_to_meshes(xdmf_file_path: str, verbose=True) -> List[meshio.Mesh]:
     """
     Opens an XDMF archive file, and extract a data mesh object for every timestep.
 
@@ -32,7 +32,8 @@ def xdmf_to_meshes(xdmf_file_path: str) -> List[meshio.Mesh]:
             time, point_data, cell_data = reader.read_data(i)
         mesh = meshio.Mesh(points, cells, point_data=point_data, cell_data=cell_data)
         meshes.append(mesh)
-    print(f"Loaded {len(meshes)} timesteps from {xdmf_file_path.split('/')[-1]}\n")
+    if verbose:
+        print(f"Loaded {len(meshes)} timesteps from {xdmf_file_path.split('/')[-1]}\n")
     return meshes
 
 def meshes_to_xdmf(
@@ -190,3 +191,9 @@ if __name__ == "__main__":
     mock_mesh = create_mock_mesh()
     vtu_path = osp.join(os.getcwd(), "mock_mesh.vtu")
     mesh_to_vtu(mock_mesh, vtu_path)
+
+
+def get_surface(mesh):
+    arr = np.zeros(mesh.point_data["Pression"].shape)
+    arr[abs(mesh.point_data["Vitesse"]).max(axis=1) <= 1e-10] = 1
+    return arr
