@@ -8,7 +8,7 @@ import tqdm
 from mesh_handler import get_geometric_data
 
 class RecurrentGNN(torch.nn.Module):
-    def __init__(self, input_dim=7, hidden_dim=64, output_dim=7):
+    def __init__(self, input_dim=7, hidden_dim=64, output_dim=4):
         super(RecurrentGNN, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -25,12 +25,15 @@ class RecurrentGNN(torch.nn.Module):
         if hidden_state is None:
             hidden_state = torch.zeros(1, 1, self.hidden_dim, device=x.device)
 
+        # x is (x, y, z, vx, vy, vz, p)
         # print(f"Initial x shape: {x.shape}, hidden_state shape: {hidden_state.shape}")
-        x = self.gnn_conv(x, edge_index)
-        x, hidden_state = self.rnn(x.unsqueeze(0), hidden_state)  # RNN step
-        x = self.fc(x.squeeze(0))
+        new_x = self.gnn_conv(x, edge_index)
+        new_x, hidden_state = self.rnn(new_x.unsqueeze(0), hidden_state)  # RNN step
+        new_x = self.fc(new_x.squeeze(0))
         # print(f"Final x shape: {x.shape}, hidden_state shape: {hidden_state.shape}")
-        return x, hidden_state
+        # new_x is (vx, vy, vz, p)
+        new_x = torch.concat((x[:, :3], new_x), dim=1)  # new_x is (x, y, z, vx, vy, vz, p)
+        return new_x, hidden_state
     
     def train_model(self, loader, optimizer, epochs=100):
         
@@ -77,7 +80,10 @@ class RecurrentGNN(torch.nn.Module):
         hidden_state = None
         for i in range(2, len(meshes)):
             x, hidden_state = self.forward(graph_data.x, graph_data.edge_index, hidden_state=hidden_state)
-            error = F.mse_loss(x, x_list_truth[i])/len(meshes[0].points)
+            v = x[:, 3:6]
+            v_truth = x_list_truth[i][:, 3:6]
+            
+            error = F.mse_loss(v, v_truth)/len(meshes[0].points)
             list_errors.append(error.item())
             total_error += error.item()
             graph_data = Data(x=x, edge_index=graph_data.edge_index, edge_attr=graph_data.edge_attr)

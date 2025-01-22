@@ -8,15 +8,18 @@ import tqdm
 from mesh_handler import get_geometric_data
 
 class GNNPredictor(torch.nn.Module):
-    def __init__(self, input_dim=7, hidden_dim=64, output_dim=7):
+    def __init__(self, input_dim=7, hidden_dim=64, output_dim=4):
         super(GNNPredictor, self).__init__()
         self.conv1 = GCNConv(input_dim, hidden_dim)
         self.conv2 = GCNConv(hidden_dim, output_dim)
 
     def forward(self, x, edge_index):
-        x = F.relu(self.conv1(x, edge_index))  # First GCN layer with ReLU
-        x = self.conv2(x, edge_index)         # Output layer
-        return x
+        # x is (x, y, z, vx, vy, vz, p)
+        new_x = F.relu(self.conv1(x, edge_index))  # First GCN layer with ReLU
+        new_x = self.conv2(new_x, edge_index)         # Output layer
+        # new_x is (vx, vy, vz, p)
+        new_x = torch.concat((x[:, :3], new_x), 1) # new_x is (x, y, z, vx, vy, vz, p)
+        return new_x
     
     def train_model(self, loader, optimizer, epochs=100):
         self.train()
@@ -58,7 +61,10 @@ class GNNPredictor(torch.nn.Module):
         list_errors = []
         for i in range(2, len(meshes)):
             x = self.forward(graph_data.x, graph_data.edge_index)
-            error = F.mse_loss(x, x_list_truth[i])/len(meshes[0].points)
+            v = x[:, 3:6]
+            v_truth = x_list_truth[i][:, 3:6]
+            
+            error = F.mse_loss(v, v_truth)/len(meshes[0].points)
             list_errors.append(error.item())
             total_error += error.item()
             graph_data = Data(x=x, edge_index=graph_data.edge_index, edge_attr=graph_data.edge_attr)
