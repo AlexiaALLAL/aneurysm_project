@@ -30,10 +30,10 @@ class GNNPredictor(torch.nn.Module):
         self.train()
         for epoch in tqdm.tqdm(range(epochs)):
             total_loss = 0
-            for data_t_minus_1, data_t in loader:
+            for graph_data in loader:
                 optimizer.zero_grad()
-                predictions = self.forward(data_t_minus_1.x, data_t_minus_1.edge_index)  # Predict x_t
-                loss = F.mse_loss(predictions, data_t.x)  # Compare with actual x_t
+                predictions = self.forward(graph_data.x, graph_data.edge_index)  # Predict x_t
+                loss = F.mse_loss(predictions, graph_data.y)  # Compare with actual x_t
                 loss.backward()
                 optimizer.step()
                 total_loss += loss.item()

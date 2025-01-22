@@ -38,12 +38,12 @@ class LSTMModel2(torch.nn.Module):
             total_loss = 0
             hidden_state, cell_state = None, None  # Reset states at the start of each epoch
 
-            for data_t_minus_1, data_t in loader:
+            for graph_data in loader:
                 optimizer.zero_grad()
-                x_pred, hidden_state, cell_state = self.forward(data_t_minus_1.x, data_t_minus_1.edge_index, hidden_state, cell_state)
+                x_pred, hidden_state, cell_state = self.forward(graph_data.x, graph_data.edge_index, hidden_state, cell_state)
                 hidden_state = hidden_state.detach()
                 cell_state = cell_state.detach()
-                loss = F.mse_loss(x_pred, data_t.x[:, :3])  # Use only vx, vy, vz for target
+                loss = F.mse_loss(x_pred, graph_data.y[:, :3])  # Use only vx, vy, vz for target
                 loss.backward()
                 optimizer.step()
                 total_loss += loss.item()
@@ -51,35 +51,6 @@ class LSTMModel2(torch.nn.Module):
             if epoch % 10 == 0:
                 print(f"Epoch {epoch} | Loss: {total_loss:.4f}")
 
-    # def test_model(self, meshes):
-    #     # Create ground truth data
-    #     edge_index, edge_attr = get_geometric_data(meshes[0])
-    #     x_list_truth = []
-    #     for time_step in range(len(meshes)):
-    #         node_features = np.hstack([
-    #             meshes[time_step].points,
-    #             meshes[time_step].point_data['Vitesse'],
-    #             meshes[time_step].point_data['Pression'].reshape(-1, 1)
-    #         ])  # Shape: (num_nodes, 7)
-    #         node_features = torch.tensor(node_features, dtype=torch.float)
-    #         x_list_truth.append(node_features)
-
-    #     # Initialize data for the first prediction
-    #     graph_data = Data(x=x_list_truth[1], edge_index=edge_index, edge_attr=edge_attr)
-
-    #     # Predict each time step
-    #     total_error = 0
-    #     list_errors = []
-    #     hidden_state, cell_state = None, None
-    #     for i in range(2, len(meshes)):
-    #         x_pred, hidden_state, cell_state = self.forward(graph_data.x, graph_data.edge_index, hidden_state, cell_state)
-    #         error = F.mse_loss(x_pred, x_list_truth[i][:, :3]) / len(meshes[0].points)
-    #         list_errors.append(error.item())
-    #         total_error += error.item()
-    #         graph_data = Data(x=x_pred, edge_index=graph_data.edge_index, edge_attr=graph_data.edge_attr)
-    #     total_error /= len(meshes)
-    #     print(f"Total error: {total_error:.4f}")
-    #     return total_error, list_errors
     def test_model(self, meshes):
         # Préparer les données de vérité terrain
         edge_index, edge_attr = get_geometric_data(meshes[0])
