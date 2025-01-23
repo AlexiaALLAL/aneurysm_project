@@ -46,7 +46,7 @@ class LSTMModel2(torch.nn.Module):
                 x_pred, hidden_state, cell_state = self.forward(graph_data.x, graph_data.edge_index, hidden_state, cell_state)
                 hidden_state = hidden_state.detach()
                 cell_state = cell_state.detach()
-                loss = F.mse_loss(x_pred, graph_data.y[:, :3])  # Use only vx, vy, vz for target
+                loss = F.mse_loss(x_pred, graph_data.y[:, 3:6])  # Use only vx, vy, vz for target
                 loss.backward()
                 optimizer.step()
                 total_loss += loss.item()
@@ -93,7 +93,7 @@ class LSTMModel2(torch.nn.Module):
 
             # Calcul de l'erreur
             x_pred.to(device)
-            x_truth = x_list_truth[i][:, :3].to(device)
+            x_truth = x_list_truth[i][:, 3:6].to(device)
             error = F.mse_loss(x_pred, x_truth) / nb_points
             list_errors.append(error.item())
             total_error += error.item()
