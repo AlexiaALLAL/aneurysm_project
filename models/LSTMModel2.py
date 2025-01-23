@@ -7,6 +7,8 @@ import tqdm
 
 from mesh_handler import get_geometric_data
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 class LSTMModel2(torch.nn.Module):
     def __init__(self, input_dim=7, hidden_dim=64, output_dim=3):
         super(LSTMModel2, self).__init__()
@@ -33,6 +35,7 @@ class LSTMModel2(torch.nn.Module):
         return x, hidden_state, cell_state
 
     def train_model(self, loader, optimizer, epochs=100):
+        self.to(device)
         for epoch in tqdm.tqdm(range(epochs)):
             self.train()
             total_loss = 0
@@ -47,13 +50,20 @@ class LSTMModel2(torch.nn.Module):
                 loss.backward()
                 optimizer.step()
                 total_loss += loss.item()
+            
+            # add a checkpoint to save the model
+            torch.save(self.state_dict(), 'checkpoint.pth')
 
             if epoch % 10 == 0:
                 print(f"Epoch {epoch} | Loss: {total_loss:.4f}")
 
     def test_model(self, meshes):
+        self.to(device)
         # Préparer les données de vérité terrain
         edge_index, edge_attr = get_geometric_data(meshes[0])
+        edge_index = edge_index.to(device)
+        edge_attr = edge_attr.to(device)
+
         x_list_truth = []
         for time_step in range(len(meshes)):
             node_features = np.hstack([
@@ -61,17 +71,18 @@ class LSTMModel2(torch.nn.Module):
                 meshes[time_step].point_data['Vitesse'],  # Vitesses (vx, vy, vz)
                 meshes[time_step].point_data['Pression'].reshape(-1, 1)  # Pression
             ])  # Shape: (num_nodes, 7)
-            node_features = torch.tensor(node_features, dtype=torch.float)
+            node_features = torch.tensor(node_features, dtype=torch.float).to(device)
             x_list_truth.append(node_features)
     
         # Vérification des dimensions initiales
         print(f"x_list_truth[0].shape = {x_list_truth[0].shape}")
     
         # Initialiser les données pour la prédiction
-        graph_data = Data(x=x_list_truth[1][:, :7], edge_index=edge_index, edge_attr=edge_attr)
+        graph_data = Data(x=x_list_truth[1][:, :7], edge_index=edge_index, edge_attr=edge_attr).to(device)
         print(f"Initial graph_data.x shape: {graph_data.x.shape}")
     
         # Prédire chaque étape temporelle
+        nb_points = len(meshes[0].points)
         total_error = 0
         list_errors = []
         hidden_state, cell_state = None, None
@@ -79,9 +90,11 @@ class LSTMModel2(torch.nn.Module):
             #print(f"Step {i}: graph_data.x.shape = {graph_data.x.shape}")
             x_pred, hidden_state, cell_state = self.forward(graph_data.x, graph_data.edge_index, hidden_state, cell_state)
             #print(f"Step {i}: x_pred.shape = {x_pred.shape}")
-        
+
             # Calcul de l'erreur
-            error = F.mse_loss(x_pred, x_list_truth[i][:, :3]) / len(meshes[0].points)
+            x_pred.to(device)
+            x_truth = x_list_truth[i][:, :3].to(device)
+            error = F.mse_loss(x_pred, x_truth) / nb_points
             list_errors.append(error.item())
             total_error += error.item()
             # Reconstruire les 7 caractéristiques pour la prochaine étape#####pbl de dimention 
