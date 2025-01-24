@@ -42,14 +42,17 @@ class RecurrentGNN(torch.nn.Module):
             total_loss = 0
             hidden_state = None  # Reset hidden state at the start of each epoch
 
-            for data_t_minus_1, data_t in loader:
+            for graph_data in loader:
                 optimizer.zero_grad()
-                x_pred, hidden_state = self.forward(data_t_minus_1.x, data_t_minus_1.edge_index, hidden_state)
+                x_pred, hidden_state = self.forward(graph_data.x, graph_data.edge_index, hidden_state)
                 hidden_state = hidden_state.detach()  # Detach hidden state to prevent backpropagating through time
-                loss = F.mse_loss(x_pred, data_t.x)
+                loss = F.mse_loss(x_pred, graph_data.y)
                 loss.backward(retain_graph=True)
                 optimizer.step() 
                 total_loss += loss.item()
+            
+            # add a checkpoint to save the model
+            torch.save(self.state_dict(), 'checkpoint.pth')
             
             if epoch % 10 == 0:
                 print(f"Epoch {epoch} | Loss: {total_loss:.4f}")
